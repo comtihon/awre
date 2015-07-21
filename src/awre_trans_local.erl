@@ -24,55 +24,56 @@
 -module(awre_trans_local).
 -behaviour(awre_transport).
 
+-include_lib("erwa/include/erwa_model.hrl").
+
 -export([init/1]).
 -export([send_to_router/2]).
 -export([handle_info/2]).
 -export([shutdown/1]).
 
--record(state,{
-               awre_con = none,
-               version = unknown,
-               client_details = unknown,
-               session = none
-               }).
+-record(state, {
+  awre_con = none,
+  version = unknown,
+  client_details = unknown,
+  session = none
+}).
 
 
-init(Args) ->
-  #{realm := Realm, awre_con := Con, client_details := CDetails, version := Version} = Args,
-  Session = erwa_session:set_source(local,erwa_session:create()),
-  State = #state{session=Session,awre_con=Con, version = Version, client_details=CDetails},
-  send_to_router({hello,Realm,#{version => Version, roles => CDetails}},State).
+init(#{realm := Realm, awre_con := Con, client_details := CDetails, version := Version}) ->
+  Session = #session{source = local},
+  State = #state{session = Session, awre_con = Con, version = Version, client_details = CDetails},
+  send_to_router({hello, Realm, #{version => Version, roles => CDetails}}, State).
 
-send_to_router(MsgToRouter, #state{session=Session,awre_con=Con} = State) ->
-  case erwa_session:handle_message(MsgToRouter,Session) of
-    {ok,NewSession} ->
-      {ok,State#state{session=NewSession}};
-    {stop,NewSession} ->
+send_to_router(MsgToRouter, #state{session = Session, awre_con = Con} = State) ->
+  case erwa_session:handle_message(MsgToRouter, Session) of
+    {ok, NewSession} ->
+      {ok, State#state{session = NewSession}};
+    {stop, NewSession} ->
       awre_con:close_connection(Con),
-      {ok,State#state{session=NewSession}};
-    {reply,Msg,NewSession} ->
-      awre_con:send_to_client(Msg,Con),
-      {ok,State#state{session=NewSession}};
-    {reply_stop,Msg,NewSession} ->
-      awre_con:send_to_client(Msg,Con),
+      {ok, State#state{session = NewSession}};
+    {reply, Msg, NewSession} ->
+      awre_con:send_to_client(Msg, Con),
+      {ok, State#state{session = NewSession}};
+    {reply_stop, Msg, NewSession} ->
+      awre_con:send_to_client(Msg, Con),
       awre_con:close_connection(Con),
-      {ok,State#state{session=NewSession}}
+      {ok, State#state{session = NewSession}}
   end.
 
-handle_info({erwa,MsgFromRouter},#state{session=Session,awre_con=Con}=State) ->
-  case erwa_session:handle_info(MsgFromRouter,Session) of
-    {ok,NewSession} ->
-      {ok,State#state{session=NewSession}};
-    {stop,NewSession} ->
+handle_info({erwa, MsgFromRouter}, #state{session = Session, awre_con = Con} = State) ->
+  case erwa_session:handle_info(MsgFromRouter, Session) of
+    {ok, NewSession} ->
+      {ok, State#state{session = NewSession}};
+    {stop, NewSession} ->
       awre_con:close_connection(Con),
-      {ok,State#state{session=NewSession}};
-    {send,Msg,NewSession} ->
-      awre_con:send_to_client(Msg,Con),
-      {ok,State#state{session=NewSession}};
-    {send_stop,Msg,NewSession} ->
-      awre_con:send_to_client(Msg,Con),
+      {ok, State#state{session = NewSession}};
+    {send, Msg, NewSession} ->
+      awre_con:send_to_client(Msg, Con),
+      {ok, State#state{session = NewSession}};
+    {send_stop, Msg, NewSession} ->
+      awre_con:send_to_client(Msg, Con),
       awre_con:close_connection(Con),
-      {ok,State#state{session=NewSession}}
+      {ok, State#state{session = NewSession}}
   end.
 
 shutdown(_State) ->

@@ -11,3 +11,7 @@ rel/example_project
 .erlang.mk.*
 _rel/
 logs/
+
+awre.iml
+.idea
+.erlang.mk

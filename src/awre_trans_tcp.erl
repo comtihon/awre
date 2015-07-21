@@ -29,23 +29,23 @@
 -export([handle_info/2]).
 -export([shutdown/1]).
 
--record(state,{
-               awre_con = unknown,
-               socket = none,
-               enc = unknown,
-               sernum = unknown,
-               realm = none,
-               version = unknown,
-               client_details = unknown,
-               buffer = <<"">>,
-               out_max = unknown,
-               handshake = in_progress
-               }).
+-record(state, {
+  awre_con = unknown,
+  socket = none,
+  enc = unknown,
+  sernum = unknown,
+  realm = none,
+  version = unknown,
+  client_details = unknown,
+  buffer = <<"">>,
+  out_max = unknown,
+  handshake = in_progress
+}).
 
 
 init(#{realm := Realm, awre_con := Con, client_details := CDetails, version := Version,
-    host := Host, port := Port, enc := Encoding}) ->
-  {ok, Socket} = gen_tcp:connect(Host,Port,[binary,{packet,0}]),
+  host := Host, port := Port, enc := Encoding}) ->
+  {ok, Socket} = gen_tcp:connect(Host, Port, [binary, {packet, 0}]),
   % need to send the new TCP packet
   Enc = case Encoding of
           json -> raw_json;
@@ -60,53 +60,51 @@ init(#{realm := Realm, awre_con := Con, client_details := CDetails, version := V
              raw_json -> 1;
              raw_msgpack -> 2;
              raw_erlbin ->
-               EBinNumber = application:get_env(awre,erlbin_number,undefined),
+               EBinNumber = application:get_env(awre, erlbin_number, undefined),
                case {is_integer(EBinNumber), EBinNumber > 0} of
-                 {true,true} -> EBinNumber;
+                 {true, true} -> EBinNumber;
                  _ -> error("application parameter erlbin_number not set")
                end;
              _ -> 0
            end,
   MaxLen = 15,
-  ok = gen_tcp:send(Socket,<<127,MaxLen:4,SerNum:4,0,0>>),
-  {ok,#state{awre_con=Con, version = Version, client_details=CDetails, socket=Socket, enc=Enc, sernum=SerNum, realm=Realm}}.
+  ok = gen_tcp:send(Socket, <<127, MaxLen:4, SerNum:4, 0, 0>>),
+  {ok, #state{awre_con = Con, version = Version, client_details = CDetails, socket = Socket, enc = Enc, sernum = SerNum, realm = Realm}}.
 
-send_to_router(Message,#state{socket=S, enc=Enc, out_max=MaxLength} = State) ->
-  SerMessage = wamper_protocol:serialize(Message,Enc),
+send_to_router(Message, #state{socket = S, enc = Enc, out_max = MaxLength} = State) ->
+  SerMessage = wamper_protocol:serialize(Message, Enc),
   case byte_size(SerMessage) > MaxLength of
     true ->
       ok;
     false ->
-      ok = gen_tcp:send(S,SerMessage)
+      ok = gen_tcp:send(S, SerMessage)
   end,
-  {ok,State}.
+  {ok, State}.
 
-handle_info({tcp,Socket,Data},#state{buffer=Buffer,socket=Socket,enc=Enc, handshake=done}=State) ->
-  {Messages,NewBuffer} = wamper_protocol:deserialize(<<Buffer/binary, Data/binary>>,Enc),
-  forward_messages(Messages,State),
-  {ok,State#state{buffer=NewBuffer}};
-handle_info({tcp,Socket,<<127,0,0,0>>},#state{socket=Socket}=State) ->
-  forward_messages([{abort,#{},tcp_handshake_failed}],State),
-  {ok,State};
-handle_info({tcp,Socket,<<127,L:4,S:4,0,0>>},
-            #state{socket=Socket,realm=Realm,sernum=SerNum, version=Version, client_details=CDetails}=State) ->
+handle_info({tcp, Socket, Data}, #state{buffer = Buffer, socket = Socket, enc = Enc, handshake = done} = State) ->
+  {Messages, NewBuffer} = wamper_protocol:deserialize(<<Buffer/binary, Data/binary>>, Enc),
+  forward_messages(Messages, State),
+  {ok, State#state{buffer = NewBuffer}};
+handle_info({tcp, Socket, <<127, 0, 0, 0>>}, #state{socket = Socket} = State) ->
+  forward_messages([{abort, #{}, tcp_handshake_failed}], State),
+  {ok, State};
+handle_info({tcp, Socket, <<127, L:4, S:4, 0, 0>>},
+    #state{socket = Socket, realm = Realm, sernum = SerNum, version = Version, client_details = CDetails} = State) ->
   S = SerNum,
-  State1 = State#state{out_max=math:pow(2,9+L), handshake=done},
-  send_to_router({hello,Realm,#{agent=>Version, roles => CDetails}},State1);
-handle_info(_Data,State) ->
-  {ok,State}.
+  State1 = State#state{out_max = math:pow(2, 9 + L), handshake = done},
+  send_to_router({hello, Realm, #{agent=>Version, roles => CDetails}}, State1);
+handle_info(_Data, State) ->
+  {ok, State}.
 
 
-shutdown(#state{socket=S}) ->
-  ok = gen_tcp:close(S),
-  ok.
+shutdown(#state{socket = S}) ->
+  ok = gen_tcp:close(S).
 
 
-
-forward_messages([],_) ->
-  ok;
-forward_messages([Msg|Tail],#state{awre_con=Con}=State) ->
-  awre_con:send_to_client(Msg,Con),
-  forward_messages(Tail,State).
+%% @private
+forward_messages([], _) -> ok;
+forward_messages([Msg | Tail], #state{awre_con = Con} = State) ->
+  awre_con:send_to_client(Msg, Con),
+  forward_messages(Tail, State).
 
 

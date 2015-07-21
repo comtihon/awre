@@ -29,10 +29,8 @@
 -export([stop/1]).
 
 %% API.
-
 start(_Type, _Args) ->
   awre_sup:start_link().
-
 
 stop(_State) ->
 	ok.
