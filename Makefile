@@ -7,6 +7,6 @@ COMPILE_FIRST = awre_transport.erl
 
 DEPS = wamper erwa
 dep_wamper = git https://github.com/comtihon/wamper master
-dep_erwa = git https://github.com/comtihon/erwa master
+dep_erwa = git https://github.com/comtihon/erwa  less_common_threads
 
 include erlang.mk

@@ -122,16 +122,11 @@ handle_cast({shutdown, Details, Reason}, #state{goodbye_sent = GS, transport = {
              end,
   {noreply, NewState#state{goodbye_sent = true}};
 
-handle_cast(terminate, #state{transport = {TMod, TState}} = State) ->
-  ok = TMod:shutdown(TState),
+handle_cast(terminate, State) ->
   {stop, normal, State};
 
 handle_cast(_Request, State) ->
   {noreply, State}.
-
-
-
-
 
 handle_info(Data, #state{transport = {T, TState}} = State) ->
   {ok, NewTState} = T:handle_info(Data, TState),
@@ -139,6 +134,8 @@ handle_info(Data, #state{transport = {T, TState}} = State) ->
 handle_info(_Info, State) ->
   {noreply, State}.
 
+terminate(_Reason, #state{transport = {TMod, TState}}) ->
+  ok = TMod:shutdown(TState);
 terminate(_Reason, _State) ->
   ok.
 
@@ -146,6 +143,7 @@ code_change(_OldVsn, State, _Extra) ->
   {ok, State}.
 
 
+%% @private
 -spec handle_message_from_client(Msg :: term(), From :: term(), State :: #state{}) ->
   {noreply, #state{}} | {reply, Result :: term(), #state{}}.
 handle_message_from_client({connect, Host, Port, Realm, Encoding} = Msg, From,
@@ -188,19 +186,15 @@ handle_message_from_client({error, invocation, RequestId, ArgsKw, ErrorUri}, _Fr
 handle_message_from_client(_Msg, _From, State) ->
   {noreply, State}.
 
-
-
-
+%% @private
 handle_message_from_router({welcome, SessionId, RouterDetails}, State) ->
   {From, _} = get_ref(hello, hello, State),
   gen_server:reply(From, {ok, SessionId, RouterDetails}),
   {ok, State};
-
 handle_message_from_router({abort, Details, Reason}, State) ->
   {From, _} = get_ref(hello, hello, State),
   gen_server:reply(From, {abort, Details, Reason}),
   {stop, normal, State};
-
 handle_message_from_router({goodbye, _Details, _Reason}, #state{goodbye_sent = GS} = State) ->
   NewState = case GS of
                true ->
@@ -211,11 +205,6 @@ handle_message_from_router({goodbye, _Details, _Reason}, #state{goodbye_sent = G
              end,
   close_connection(),
   {ok, NewState};
-
-%handle_message_from_router({error,},#state{ets=Ets}) ->
-
-%handle_message_from_router({published,},#state{ets=Ets}) ->
-
 handle_message_from_router({subscribed, RequestId, SubscriptionId}, #state{ets = Ets} = State) ->
   {From, Args} = get_ref(RequestId, subscribe, State),
   Mfa = maps:get(mfa, Args),
@@ -223,14 +212,12 @@ handle_message_from_router({subscribed, RequestId, SubscriptionId}, #state{ets =
   ets:insert_new(Ets, #subscription{id = SubscriptionId, mfa = Mfa, pid = Pid}),
   gen_server:reply(From, {ok, SubscriptionId}),
   {ok, State};
-
 handle_message_from_router({unsubscribed, RequestId}, #state{ets = Ets} = State) ->
   {From, Args} = get_ref(RequestId, unsubscribe, State),
   SubscriptionId = maps:get(sub_id, Args),
   ets:delete(Ets, SubscriptionId),
   gen_server:reply(From, ok),
   {ok, State};
-
 handle_message_from_router({event, SubscriptionId, PublicationId, Details}, State) ->
   handle_message_from_router({event, SubscriptionId, PublicationId, Details, undefined, undefined}, State);
 handle_message_from_router({event, SubscriptionId, PublicationId, Details, Arguments}, State) ->
@@ -261,7 +248,6 @@ handle_message_from_router({result, RequestId, Details, Arguments, ArgumentsKw},
   {From, _} = get_ref(RequestId, call, State),
   gen_server:reply(From, {ok, Details, Arguments, ArgumentsKw}),
   {ok, State};
-
 handle_message_from_router({registered, RequestId, RegistrationId}, #state{ets = Ets} = State) ->
   {From, Args} = get_ref(RequestId, register, State),
   Mfa = maps:get(mfa, Args),
@@ -269,14 +255,12 @@ handle_message_from_router({registered, RequestId, RegistrationId}, #state{ets =
   ets:insert_new(Ets, #registration{id = RegistrationId, mfa = Mfa, pid = Pid}),
   gen_server:reply(From, {ok, RegistrationId}),
   {ok, State};
-
 handle_message_from_router({unregistered, RequestId}, #state{ets = Ets} = State) ->
   {From, Args} = get_ref(RequestId, unregister, State),
   RegistrationId = maps:get(reg_id, Args),
   ets:delete(Ets, RegistrationId),
   gen_server:reply(From, ok),
   {ok, State};
-
 handle_message_from_router({invocation, RequestId, RegistrationId, Details}, State) ->
   handle_message_from_router({invocation, RequestId, RegistrationId, Details, undefined, undefined}, State);
 handle_message_from_router({invocation, RequestId, RegistrationId, Details, Arguments}, State) ->
@@ -309,7 +293,6 @@ handle_message_from_router({invocation, RequestId, RegistrationId, Details, Argu
                  end
              end,
   {ok, NewState};
-
 handle_message_from_router({error, call, RequestId, Details, Error}, State) ->
   handle_message_from_router({error, call, RequestId, Details, Error, undefined, undefined}, State);
 handle_message_from_router({error, call, RequestId, Details, Error, Arguments}, State) ->
@@ -318,7 +301,6 @@ handle_message_from_router({error, call, RequestId, Details, Error, Arguments, A
   {From, _} = get_ref(RequestId, call, State),
   gen_server:reply(From, {error, Details, Error, Arguments, ArgumentsKw}),
   {ok, State};
-
 handle_message_from_router(Msg, State) ->
   io:format("unhandled message ~p~n", [Msg]),
   {ok, State}.
@@ -347,15 +329,17 @@ handle_message_from_router(Msg, State) ->
 % IDs in the session scope SHOULD be incremented by 1 beginning with 1
 % (for each direction - Client-to-Router and Router-to-Client)
 %
-
+%% @private
 send_and_ref(Msg, From, Args, State) ->
   {Message, NewState} = create_ref_for_message(Msg, From, Args, State),
   send_to_router(Message, NewState).
 
+%% @private
 send_to_router(Msg, #state{transport = {TMod, TState}} = State) ->
   {ok, NewTState} = TMod:send_to_router(Msg, TState),
   {ok, State#state{transport = {TMod, NewTState}}}.
 
+%% @private
 create_ref_for_message(Msg, From, Args, #state{ets = Ets} = State) ->
   Method = case element(1, Msg) of
              connect -> hello;
@@ -391,13 +375,13 @@ create_ref_for_message(Msg, From, Args, #state{ets = Ets} = State) ->
       {Msg, NewState}
   end.
 
-
-
+%% @private
 get_ref(ReqId, Method, #state{ets = Ets}) ->
   Key = {Method, ReqId},
   [#ref{ref = From, args = Args}] = ets:lookup(Ets, Key),
   ets:delete(Ets, Key),
   {From, Args}.
 
+%% @private
 close_connection() ->
   gen_server:cast(self(), terminate).

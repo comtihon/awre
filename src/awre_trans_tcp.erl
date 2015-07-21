@@ -98,6 +98,7 @@ handle_info(_Data, State) ->
 
 
 shutdown(#state{socket = S}) ->
+  erwa_sessions_man:unregister_session(),
   ok = gen_tcp:close(S).
 
 

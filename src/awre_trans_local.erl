@@ -77,4 +77,5 @@ handle_info({erwa, MsgFromRouter}, #state{session = Session, awre_con = Con} = S
   end.
 
 shutdown(_State) ->
+  erwa_sessions_man:unregister_session(),
   ok.
