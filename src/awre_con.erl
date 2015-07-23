@@ -340,7 +340,7 @@ send_to_router(Msg, #state{transport = {TMod, TState}} = State) ->
   {ok, State#state{transport = {TMod, NewTState}}}.
 
 %% @private
-create_ref_for_message(Msg, From, Args, #state{ets = Ets} = State) ->
+create_ref_for_message(Msg, From, Args, State = #state{ets = Ets, subscribe_id = Id}) ->
   Method = case element(1, Msg) of
              connect -> hello;
              El -> El
@@ -349,22 +349,16 @@ create_ref_for_message(Msg, From, Args, #state{ets = Ets} = State) ->
                             hello ->
                               {hello, State};
                             subscribe ->
-                              Id = State#state.subscribe_id,
                               {Id, State#state{subscribe_id = Id + 1}};
                             unsubscribe ->
-                              Id = State#state.unsubscribe_id,
                               {Id, State#state{unsubscribe_id = Id + 1}};
                             publish ->
-                              Id = State#state.publish_id,
                               {Id, State#state{publish_id = Id + 1}};
                             register ->
-                              Id = State#state.register_id,
                               {Id, State#state{register_id = Id + 1}};
                             unregister ->
-                              Id = State#state.unregister_id,
                               {Id, State#state{unregister_id = Id + 1}};
                             call ->
-                              Id = State#state.call_id,
                               {Id, State#state{call_id = Id + 1}}
                           end,
   true = ets:insert_new(Ets, #ref{key = {Method, RequestId}, ref = From, args = Args}),
